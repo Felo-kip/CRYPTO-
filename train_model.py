@@ -51,6 +51,11 @@ def load_and_merge(hist_path, yearly_path):
             .std()
             .reset_index(level=0, drop=True)
         ).fillna(0)
+    # save cleaned merged dataset for reproducibility
+    try:
+        data.to_csv('crypto_cleaned.csv', index=False)
+    except Exception:
+        pass
     return data
 
 
@@ -105,7 +110,7 @@ def train_and_save(X, y, feat_cols, coin_id, out_dir='.', n_estimators=100):
             'importance_mean': perm.importances_mean,
             'importance_std': perm.importances_std,
         }).sort_values('importance_mean', ascending=False)
-        imp_csv = out_dir + f'/feature_importances_{coin_id}.csv'
+        imp_csv = str(out_dir / f'feature_importances_{coin_id}.csv')
         imp_df.to_csv(imp_csv, index=False)
         # plot
         plt.figure(figsize=(8, max(4, len(imp_df)*0.4)))
@@ -113,7 +118,7 @@ def train_and_save(X, y, feat_cols, coin_id, out_dir='.', n_estimators=100):
         plt.xlabel('Permutation importance (mean)')
         plt.title(f'Feature importances for {coin_id}')
         plt.tight_layout()
-        imp_png = out_dir + f'/feature_importances_{coin_id}.png'
+        imp_png = str(out_dir / f'feature_importances_{coin_id}.png')
         plt.savefig(imp_png)
         plt.close()
     except Exception as e:
@@ -124,6 +129,26 @@ def train_and_save(X, y, feat_cols, coin_id, out_dir='.', n_estimators=100):
     out_path = out_dir / f'models_{coin_id}.joblib'
     joblib.dump({'lr': lr, 'rf': rf, 'scaler': scaler, 'features': feat_cols, 'coin_id': coin_id}, out_path)
 
+    # Save actual vs predicted plot (compare on test set)
+    try:
+        y_test_vals = y_test.reset_index(drop=True).values
+        pred_lr_vals = pred_lr if isinstance(pred_lr, (list, np.ndarray)) else np.array(pred_lr)
+        pred_rf_vals = pred_rf if isinstance(pred_rf, (list, np.ndarray)) else np.array(pred_rf)
+        nplot = min(200, len(y_test_vals))
+        plt.figure(figsize=(10,5))
+        idx = list(range(nplot))
+        plt.plot(idx, y_test_vals[:nplot], label='Actual', linewidth=1)
+        plt.plot(idx, pred_lr_vals[:nplot], label='Pred LR', linewidth=1)
+        plt.plot(idx, pred_rf_vals[:nplot], label='Pred RF', linewidth=1)
+        plt.title(f'Actual vs Predicted Next-Day Price for {coin_id}')
+        plt.legend()
+        plt.tight_layout()
+        avp_png = str(out_dir / f'actual_vs_pred_{coin_id}.png')
+        plt.savefig(avp_png)
+        plt.close()
+    except Exception:
+        avp_png = None
+
     results = {
         'rmse_lr': rmse_lr,
         'r2_lr': r2_lr,
@@ -132,6 +157,7 @@ def train_and_save(X, y, feat_cols, coin_id, out_dir='.', n_estimators=100):
         'model_file': str(out_path),
         'feature_importance_csv': imp_csv,
         'feature_importance_png': imp_png,
+        'actual_vs_pred_png': avp_png,
     }
     return results
 
